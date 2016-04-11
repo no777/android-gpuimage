@@ -165,6 +165,11 @@ public class GPUImageRenderer implements Renderer, PreviewCallback {
                         mImageHeight = previewSize.height;
                         adjustImageScaling();
                     }
+                    try {
+                        Thread.sleep(1);
+                    }catch (Exception e){
+
+                    }
                 }
             });
         }

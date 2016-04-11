@@ -265,6 +265,8 @@ public class ActivityCamera extends Activity implements OnSeekBarChangeListener,
                     Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)) {
                 parameters.setFocusMode(Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
             }
+            parameters.setPreviewSize(1280,720);
+
             mCameraInstance.setParameters(parameters);
 
             int orientation = mCameraHelper.getCameraDisplayOrientation(
