@@ -17,6 +17,7 @@
 package jp.co.cyberagent.android.gpuimage;
 
 import android.annotation.TargetApi;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.SurfaceTexture;
@@ -25,8 +26,14 @@ import android.hardware.Camera.PreviewCallback;
 import android.hardware.Camera.Size;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView.Renderer;
+import android.renderscript.Allocation;
+
+import android.renderscript.RenderScript;
+import android.renderscript.*;
 
 import jp.co.cyberagent.android.gpuimage.util.TextureRotationUtil;
+import tv.lycam.rtmp.video.ScriptC_invert;
+import tv.lycam.rtmp.video.*;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -39,6 +46,9 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 import static jp.co.cyberagent.android.gpuimage.util.TextureRotationUtil.TEXTURE_NO_ROTATION;
+import android.graphics.ImageFormat;
+
+import com.caguilar.android.filters.scripts.Yuv2Rgb;
 
 @TargetApi(11)
 public class GPUImageRenderer implements Renderer, PreviewCallback {
@@ -76,8 +86,17 @@ public class GPUImageRenderer implements Renderer, PreviewCallback {
     private float mBackgroundRed = 0;
     private float mBackgroundGreen = 0;
     private float mBackgroundBlue = 0;
+    private Context mContext;
+    private RenderScript rs;
+    private ScriptC_invert invert ;
 
-    public GPUImageRenderer(final GPUImageFilter filter) {
+
+    Allocation inData;
+    Allocation outData;
+    Bitmap outputBitmap;
+    Yuv2Rgb yuvScript;
+
+    public GPUImageRenderer(Context context,final GPUImageFilter filter) {
         mFilter = filter;
         mRunOnDraw = new LinkedList<Runnable>();
         mRunOnDrawEnd = new LinkedList<Runnable>();
@@ -91,6 +110,10 @@ public class GPUImageRenderer implements Renderer, PreviewCallback {
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
         setRotation(Rotation.NORMAL, false, false);
+        mContext = context;
+        rs =  RenderScript.create(context);
+        invert = new ScriptC_invert(rs);
+        yuvScript = new Yuv2Rgb(rs);
     }
 
     @Override
@@ -144,19 +167,69 @@ public class GPUImageRenderer implements Renderer, PreviewCallback {
             }
         }
     }
+    private void createScript(final Camera camera){
+        final Size previewSize = camera.getParameters().getPreviewSize();
+        int w = previewSize.width;
+        int h = previewSize.height;
 
+//        mInAllocation = Allocation.createFromBitmap(mRS, mCallbackBitmap,
+//                Allocation.MipmapControl.MIPMAP_NONE,
+//                Allocation.USAGE_SCRIPT);
+//        mOutAllocation = Allocation.createTyped(mRS, mInAllocation.getType());
+//        mOutAllocation.copyFrom(mPreCallbackBitmap);
+
+        Type.Builder tbIn = new Type.Builder(rs, Element.U8(rs));
+        tbIn.setX(w);
+        tbIn.setY(h);
+        tbIn.setFaces(false);
+        tbIn.setMipmaps(false);
+        tbIn.setYuvFormat(ImageFormat.NV21);
+
+//        Type.Builder tbOut = Allocation.createTyped(rs, tbIn.getType());
+
+        Type.Builder tbOut = new Type.Builder(rs, Element.RGBA_8888(rs));
+        tbOut.setX(w);
+        tbOut.setY(h);
+        tbOut.setFaces(false);
+        tbOut.setMipmaps(false);
+
+//        inData = Allocation.createTyped(rs, tbIn.create(), Allocation.MipmapControl.MIPMAP_NONE,  Allocation.USAGE_SCRIPT & Allocation.USAGE_SHARED);
+        outData = Allocation.createTyped(rs, tbOut.create(), Allocation.MipmapControl.MIPMAP_NONE, Allocation.USAGE_SCRIPT & Allocation.USAGE_SHARED);
+
+        outputBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+
+
+//        yuvScript = new ScriptC_yuv(rs);
+//        yuvScript.set_gIn(inData);
+//        yuvScript.set_width(w);
+//        yuvScript.set_height(h);
+//        yuvScript.set_frameSize(w * h);
+    }
     @Override
     public void onPreviewFrame(final byte[] data, final Camera camera) {
         final Size previewSize = camera.getParameters().getPreviewSize();
         if (mGLRgbBuffer == null) {
             mGLRgbBuffer = IntBuffer.allocate(previewSize.width * previewSize.height);
+            createScript(camera);
         }
+        final byte[] buffer = new byte[previewSize.width* previewSize.height *4];
         if (mRunOnDraw.isEmpty()) {
             runOnDraw(new Runnable() {
                 @Override
                 public void run() {
-                    GPUImageNativeLibrary.YUVtoRBGA(data, previewSize.width, previewSize.height,
-                            mGLRgbBuffer.array());
+//                    inData.copyFrom(data);
+                    yuvScript.convert(data, previewSize.width, previewSize.height, outData);
+                    outData.copyTo(buffer);
+
+                    int len = previewSize.width* previewSize.height;
+                    for(int i=0;i<len;i++){
+                        int idx = i* 4;
+                        int c = (int)buffer[idx+3]<<24 | (int)buffer[idx+2]<<16 | (int)buffer[idx+1]<<8 | (int)buffer[idx];
+                        mGLRgbBuffer.array()[i] = c;
+                    }
+//                    mGLRgbBuffer.put(buffer);
+//                    GPUImageNativeLibrary.YUVtoRBGA(data, previewSize.width, previewSize.height,
+//                            mGLRgbBuffer.array());
                     mGLTextureId = OpenGlUtils.loadTexture(mGLRgbBuffer, previewSize, mGLTextureId);
                     camera.addCallbackBuffer(data);
 

@@ -36,6 +36,8 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
+//import android.renderscript.RenderScript;
+
 import android.view.Display;
 import android.view.WindowManager;
 
@@ -43,6 +45,8 @@ import java.io.*;
 import java.net.URL;
 import java.util.List;
 import java.util.concurrent.Semaphore;
+
+import tv.lycam.rtmp.video.ScriptC_invert;
 
 /**
  * The main accessor for GPUImage functionality. This class helps to do common
@@ -55,7 +59,6 @@ public class GPUImage {
     private GPUImageFilter mFilter;
     private Bitmap mCurrentBitmap;
     private ScaleType mScaleType = ScaleType.CENTER_CROP;
-
     /**
      * Instantiates a new GPUImage object.
      *
@@ -68,7 +71,8 @@ public class GPUImage {
 
         mContext = context;
         mFilter = new GPUImageFilter();
-        mRenderer = new GPUImageRenderer(mFilter);
+        mRenderer = new GPUImageRenderer(mContext,mFilter);
+
     }
 
     /**
@@ -301,7 +305,7 @@ public class GPUImage {
             }
         }
 
-        GPUImageRenderer renderer = new GPUImageRenderer(mFilter);
+        GPUImageRenderer renderer = new GPUImageRenderer(mContext,mFilter);
         renderer.setRotation(Rotation.NORMAL,
                 mRenderer.isFlippedHorizontally(), mRenderer.isFlippedVertically());
         renderer.setScaleType(mScaleType);
@@ -333,12 +337,12 @@ public class GPUImage {
      * @param filters the filters which will be applied on the bitmap
      * @param listener the listener on which the results will be notified
      */
-    public static void getBitmapForMultipleFilters(final Bitmap bitmap,
+    public static void getBitmapForMultipleFilters(final Context ctx, final Bitmap bitmap,
             final List<GPUImageFilter> filters, final ResponseListener<Bitmap> listener) {
         if (filters.isEmpty()) {
             return;
         }
-        GPUImageRenderer renderer = new GPUImageRenderer(filters.get(0));
+        GPUImageRenderer renderer = new GPUImageRenderer(ctx,filters.get(0));
         renderer.setImageBitmap(bitmap, false);
         PixelBuffer buffer = new PixelBuffer(bitmap.getWidth(), bitmap.getHeight());
         buffer.setRenderer(renderer);

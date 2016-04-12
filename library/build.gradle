@@ -20,6 +20,10 @@ android {
             abiFilters "all"
             ldLibs "log"
         }
+        renderscriptTargetApi 18
+//        renderscriptSupportModeEnabled true
+
+
     }
 
     sourceSets {
